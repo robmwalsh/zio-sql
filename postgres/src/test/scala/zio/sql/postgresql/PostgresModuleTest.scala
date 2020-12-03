@@ -20,6 +20,12 @@ object PostgresModuleTest extends PostgresRunnableSpec with ShopSchema {
     val query =
       select(customerId ++ fName ++ lName ++ verified ++ dob) from customers where (condition)
 
+       val cols = fName
+
+    val values = select(lName) from customers
+    val x      = insertInto(customers)(cols).values(values)
+
+     println(x)
     //should work
     //insertInto(customers){fName ++ lName ++ dob} values ("Joe" ++ "Bloggs" ++ LocalDate.of(1990, 1, 8), "Matt" ++ "Smith" ++ LocalDate.of(1978, 4, 5))
     //shouldn"t work (not enough arguments)

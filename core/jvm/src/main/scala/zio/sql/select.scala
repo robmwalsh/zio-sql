@@ -14,8 +14,7 @@ trait SelectModule { self: ExprModule with TableModule =>
     table: Table.Aux[TableType],
     selection: SourceSelection[A, B]
   ) {
-
-   /* def values[A1 <: A](something: SomeType[A1, B]) = ??? // */
+    def values[A1 <: A](something: Read.Select[_, A, B]*) = ???
   }
 
   /**
