@@ -7,6 +7,8 @@ import scala.language.implicitConversions
 trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
   self: SelectModule with TableModule =>
 
+  type SourceExpr[A, B] = Expr[Features.Source, A, B]
+
   /**
    * Models a function `A => B`.
    * SELECT product.price + 10
@@ -125,6 +127,11 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
     ): Selection[F, A, SelectionSet.Cons[A, B, SelectionSet.Empty]] =
       Selection.computedOption(expr, exprName(expr))
 
+    implicit def expToSourceSelection[A, B](
+      expr: SourceExpr[A, B]
+    ): SourceSelection[A, SelectionSet.Cons[A, B, SelectionSet.Empty]] =
+      Selection.computedOption(expr, exprName(expr))
+
     sealed case class Source[A, B] private[sql] (tableName: TableName, column: Column[B])
         extends InvariantExpr[Features.Source, A, B] {
       def typeTag: TypeTag[B] = column.typeTag
@@ -163,17 +170,17 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
     }
 
     sealed case class ParenlessFunctionCall0[Z: TypeTag](function: FunctionName)
-        extends InvariantExpr[Features.Function0, Any, Z] {
+        extends InvariantExpr[Features.Function0[Z], Any, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
 
     sealed case class FunctionCall0[Z: TypeTag](function: FunctionDef[Any, Z])
-        extends InvariantExpr[Features.Function0, Any, Z] {
+        extends InvariantExpr[Features.Function0[Z], Any, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
 
-    sealed case class FunctionCall1[F, A, B, Z: TypeTag](param: Expr[F, A, B], function: FunctionDef[B, Z])
-        extends InvariantExpr[F, A, Z] {
+    sealed case class FunctionCall1[F1, A, B, Z: TypeTag](param: Expr[F1, A, B], function: FunctionDef[B, Z])
+        extends InvariantExpr[Features.Function1[F1, Z], A, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
 
@@ -181,7 +188,7 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
       param1: Expr[F1, A, B],
       param2: Expr[F2, A, C],
       function: FunctionDef[(B, C), Z]
-    ) extends InvariantExpr[Features.Union[F1, F2], A, Z] {
+    ) extends InvariantExpr[Features.Function2[F1, F2, Z], A, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
 
@@ -190,7 +197,7 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
       param2: Expr[F2, A, C],
       param3: Expr[F3, A, D],
       function: FunctionDef[(B, C, D), Z]
-    ) extends InvariantExpr[Features.Union[F1, Features.Union[F2, F3]], A, Z] {
+    ) extends InvariantExpr[Features.Function3[F1, F2, F3, Z], A, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
 
@@ -200,7 +207,7 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
       param3: Expr[F3, A, D],
       param4: Expr[F4, A, E],
       function: FunctionDef[(B, C, D, E), Z]
-    ) extends InvariantExpr[Features.Union[F1, Features.Union[F2, Features.Union[F3, F4]]], A, Z] {
+    ) extends InvariantExpr[Features.Function4[F1, F2, F3, F4, Z], A, Z] {
       def typeTag: TypeTag[Z] = implicitly[TypeTag[Z]]
     }
   }
@@ -224,23 +231,25 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
 
   sealed case class FunctionDef[-A, +B](name: FunctionName) { self =>
 
-    def apply[B1 >: B]()(implicit ev: Any <:< A, typeTag: TypeTag[B1]): Expr[Features.Function0, Any, B1] =
+    def apply[B1 >: B]()(implicit ev: Any <:< A, typeTag: TypeTag[B1]): Expr[Features.Function0[B1], Any, B1] =
       Expr.FunctionCall0(self.asInstanceOf[FunctionDef[Any, B1]])
 
-    def apply[F, Source, B1 >: B](param1: Expr[F, Source, A])(implicit typeTag: TypeTag[B1]): Expr[F, Source, B1] =
+    def apply[F1, Source, B1 >: B](param1: Expr[F1, Source, A])(implicit
+      typeTag: TypeTag[B1]
+    ): Expr[Features.Function1[F1, B1], Source, B1] =
       Expr.FunctionCall1(param1, self: FunctionDef[A, B1])
 
     def apply[F1, F2, Source, P1, P2, B1 >: B](param1: Expr[F1, Source, P1], param2: Expr[F2, Source, P2])(implicit
       ev: (P1, P2) <:< A,
       typeTag: TypeTag[B1]
-    ): Expr[F1 :||: F2, Source, B1] =
+    ): Expr[Features.Function2[F1, F2, B1], Source, B1] =
       Expr.FunctionCall2(param1, param2, self.narrow[(P1, P2)]: FunctionDef[(P1, P2), B1])
 
     def apply[F1, F2, F3, Source, P1, P2, P3, B1 >: B](
       param1: Expr[F1, Source, P1],
       param2: Expr[F2, Source, P2],
       param3: Expr[F3, Source, P3]
-    )(implicit ev: (P1, P2, P3) <:< A, typeTag: TypeTag[B1]): Expr[F1 :||: F2 :||: F3, Source, B1] =
+    )(implicit ev: (P1, P2, P3) <:< A, typeTag: TypeTag[B1]): Expr[Features.Function3[F1, F2, F3, B1], Source, B1] =
       Expr.FunctionCall3(param1, param2, param3, self.narrow[(P1, P2, P3)]: FunctionDef[(P1, P2, P3), B1])
 
     def apply[F1, F2, F3, F4, Source, P1, P2, P3, P4, B1 >: B](
@@ -248,7 +257,10 @@ trait ExprModule extends NewtypesModule with FeaturesModule with OpsModule {
       param2: Expr[F2, Source, P2],
       param3: Expr[F3, Source, P3],
       param4: Expr[F4, Source, P4]
-    )(implicit ev: (P1, P2, P3, P4) <:< A, typeTag: TypeTag[B1]): Expr[F1 :||: F2 :||: F3 :||: F4, Source, B1] =
+    )(implicit
+      ev: (P1, P2, P3, P4) <:< A,
+      typeTag: TypeTag[B1]
+    ): Expr[Features.Function4[F1, F2, F3, F4, B1], Source, B1] =
       Expr.FunctionCall4(
         param1,
         param2,

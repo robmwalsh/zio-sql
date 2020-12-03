@@ -10,6 +10,14 @@ trait SelectModule { self: ExprModule with TableModule =>
       Read.Select(selection, table, true, Nil)
   }
 
+  sealed case class InsertBuilder[TableType, A, B <: SelectionSet[A]](
+    table: Table.Aux[TableType],
+    selection: SourceSelection[A, B]
+  ) {
+
+   /* def values[A1 <: A](something: SomeType[A1, B]) = ??? // */
+  }
+
   /**
    * A `Read[A]` models a selection of a set of values of type `A`.
    */
@@ -78,9 +86,20 @@ trait SelectModule { self: ExprModule with TableModule =>
   /**
    * A columnar selection of `B` from a source `A`, modeled as `A => B`.
    */
+
+  type SourceSelection[-A, +B <: SelectionSet[A]] = Selection[Features.Source, A, B]
+
   sealed case class Selection[F, -A, +B <: SelectionSet[A]](value: B) { self =>
 
     type SelectionType
+
+    def :*:[F2, A1 <: A, C <: SelectionSet[A1]](
+      that: Selection[F2, A1, C]
+    )(implicit
+      ev: F =:= Features.Source,
+      ev2: F2 =:= Features.Source
+    ): Selection[Features.Source, A1, self.value.Append[A1, C]] =
+      Selection(self.value ++ that.value)
 
     def ++[F2, A1 <: A, C <: SelectionSet[A1]](
       that: Selection[F2, A1, C]

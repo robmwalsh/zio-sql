@@ -27,4 +27,9 @@ trait Sql extends SelectModule with DeleteModule with UpdateModule with ExprModu
 
   def renderUpdate(update: self.Update[_]): String
 
+  //insertInto(customers){fName ++ lName ++ dob}
+  def insertInto[TableType, A, B <: SelectionSet[A]](table: Table.Aux[TableType])(
+    columns: SourceSelection[A, B]
+  ): InsertBuilder[TableType, A, B] = InsertBuilder(table, columns)
+
 }

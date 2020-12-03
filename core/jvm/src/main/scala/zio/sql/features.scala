@@ -9,9 +9,13 @@ trait FeaturesModule {
   object Features {
     type Aggregated[_]
     type Union[_, _]
+    type Function0[_]
+    type Function1[_, _]
+    type Function2[_, _, _]
+    type Function3[_, _, _, _]
+    type Function4[_, _, _, _, _]
     type Source
     type Literal
-    type Function0
 
     sealed trait IsAggregated[A]
 
